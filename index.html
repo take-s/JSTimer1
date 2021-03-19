@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8" />
+		<!-- Written by Kamaitachi(take-s). 202103 v1.00-->
+		<!-- 学会プレゼンタイマー JavaScript版 -->
+		<!-- 精度とかはあまり考慮していません。コードに責任は持ちません。ご自由にお使いください。 -->
+		<!-- このファイルの他に音声ファイルが必要です -->
+		
+		<style type="text/css">
+			div.view-jstimer {
+				display: grid;
+				grid-template-rows: 60% 20% 10% 10%;
+			}
+			div.view-control {
+				display: grid;
+				grid-template-columns: 3fr 2fr;
+			}
+			div.view-control-right {
+				float: right;
+			}
+			div.view-set-items {
+				display: grid;
+				grid-template-columns: 6fr 6fr 5fr;
+			}
+			div.view-set-combo {
+				display: grid;
+				grid-template-columns: 1fr 1fr;
+				text-align: center;
+			}
+			div.view-nowtime {
+				display: grid;
+				grid-template-columns: 1fr 1fr;
+				text-align: center;
+			}
+			.txtCountdown {
+				font-weight: 600;
+				font-size: 35vmin;
+				text-align: center;
+			}
+			.txtMessage {
+				font-weight: 600;
+				font-size: 10vh;
+				text-align: center;
+			}
+			.btnSetting1 {
+				width: 30%;
+				height: 80%;
+			}
+			.btnSetting2 {
+				width: 5em;
+				height: 80%;
+			}
+			.btnSetting3 {
+				width: 1em;
+				height: 80%;
+			}	
+			.digit3 {
+				width: 3em;
+			}
+		</style>
+
+		<script type="text/javascript">
+			var message=["開始前","講演中","一時停止","質問時間","時間超過"];
+			var msgcolor=[0,0,0,1,2];  // messageの色表現 0: 標準 1:カラー1 2:カラー2
+			var colorSet=[['white', 'black', 'blue', 'red'], ['black', 'white', 'lightblue', 'yellow']]; // 背景, 文字色, カラー1, カラー2
+	
+			var fileBell=['bell1.mp3','bell2.mp3','bell3.mp3','bell4.mp3']; // 発表時間終わり, 質問時間終わり, 予鈴1, 予鈴2
+			var fileVoice=['voice1.mp3','voice2.mp3','voice3.mp3','voice4.mp3']; // 発表時間終わり, 質問時間終わり, 予鈴1, 予鈴2
+			
+			var boolCountdown=false;
+			var intervalId;
+			var eIdTxtNowtime;
+			var eIdTxtCdtime;
+			var boolCountdown;
+			var eIdOpBell;
+			var numMsg=0;
+			var numMode=0;
+			var boolBell;
+			var eIdTxtElapsedTime;
+			var tmElapsedTime1;
+			var tmStartTime;
+			var tmSetTime;
+			
+			function init() {
+				eIdTxtNowtime = document.getElementById("txtNowTime");
+				eIdTxtCdtime = document.getElementById("txtCdTimer");
+				eIdTxtElapsedTime = document.getElementById("txtElapsedTime");
+				eIdOpBell = document.getElementById("opBell");;
+
+				tmSetTime = new Array(4);
+				
+				eIdOpBell.value = "01"; // デフォルトBell設定  Bellモード:00 Voiceモード:01
+				
+				reset();
+				boolCountdown=0
+				changemode(0);
+				numMode=0;
+				numMsg=2;
+				showMessage();
+				
+				// 音声読み込み
+				boolBell=new Array(fileBell.length);
+				for(let i=0; i<fileBell.length; i++){
+					let audio = new Audio();
+					audio.preload = "auto";
+					audio.id = 'sound'+i;
+					audio.src = fileBell[i];
+					document.body.appendChild(audio);
+					boolBell[i] = 1;
+				}
+				for(let i=0; i<fileVoice.length; i++){
+					let audio = new Audio();
+					audio.preload = "auto";
+					audio.id = 'vsound'+i;
+					audio.src = fileVoice[i];
+					document.body.appendChild(audio);
+				}
+				
+				// インターバル設定
+				intervalId = setInterval(intervalfunc, 1000);
+			}
+			
+			function playSound(soundNum){
+				// 初回再生はスルーする、それ以外は巻き戻す。
+				if( eIdOpBell.value === "00" ){
+					if( typeof( document.getElementById('sound'+soundNum).currentTime ) != 'undefined' ){
+						document.getElementById('sound'+soundNum).currentTime = 0;
+					}
+					document.getElementById('sound'+soundNum).play();
+				}
+				if( eIdOpBell.value === "01" ){
+					if( typeof( document.getElementById('vsound'+soundNum).currentTime ) != 'undefined' ){
+						document.getElementById('vsound'+soundNum).currentTime = 0;
+					}
+					document.getElementById('vsound'+soundNum).play();
+				}
+			}
+			
+			function intervalfunc(){
+				let nowdate = new Date(); // 現在時刻
+				let nowtime;
+				let etime;
+				
+				// 現在時刻表示更新
+				nowtime=("0"+nowdate.getHours()).slice(-2)+":"+("0"+nowdate.getMinutes()).slice(-2)+":"+ ("0"+nowdate.getSeconds()).slice(-2);
+				eIdTxtNowtime.innerHTML = nowtime;
+				
+				
+				// 残り時間更新
+				if(boolCountdown==1){
+					
+					// 経過時間更新
+					etime = nowdate.getTime()-tmStartTime.getTime()+tmElapsedTime1  +1;
+					dispElapseTime(etime);
+					
+					
+					// ここから新ロジック
+					for(let j=0;j<4;j++){
+						if( tmSetTime[j]>etime ) { boolBell[j] = 0; }
+						else {
+							if(boolBell[j] == 0){
+								playSound(j);
+								boolBell[j] = 1;
+							}
+						}
+					}
+					
+					// 表示
+					if( tmSetTime[0]>etime ) {
+						// 講演時間中
+						dispLeftTime(tmSetTime[0]-etime);
+					} else {
+						if( tmSetTime[1]>etime ) {
+							// 質問時間
+							dispLeftTime(tmSetTime[1]-etime);
+							numMsg=3;
+							showMessage();
+						} else {
+							// 時間超過
+							dispLeftTime(etime-tmSetTime[1]);
+							numMsg=4;
+							showMessage();
+						}
+					}
+				}
+				
+				// date1.setDate(date1.getMinutes() - 1);
+			}
+			
+			function dispLeftTime(reftime){
+				// 残り時間表示
+				let min1=Math.floor(((reftime/60)/1000));
+				let sec1=Math.round((reftime-min1*60*1000)/1000);
+				if(sec1>=60) { min1=min1+1; sec1=sec1-60; }
+				eIdTxtCdtime.innerHTML = min1+":"+("0"+sec1).slice(-2);
+			}
+
+			function dispElapseTime(etime){	
+				let min1=Math.floor(((etime/60)/1000));
+				let sec1=Math.round((etime-min1*60*1000)/1000);
+				if(sec1>=60) { min1=min1+1; sec1=sec1-60; }
+				eIdTxtElapsedTime.innerHTML = min1+":"+("0"+sec1).slice(-2);
+			}
+			
+			function reset(){
+				readSpinButton();
+				
+				// 残り時間表示
+				dispLeftTime(tmSetTime[0]);
+				
+				// メッセージ変更
+				numMsg=0;
+				showMessage();
+				
+				// 経過時間計算用
+				tmElapsedTime1=0;
+				dispElapseTime(tmElapsedTime1);
+				tmStartTime = new Date();
+				
+			}
+			
+			function readSpinButton(){
+				// スピンボタンの値をセット
+				tmSetTime[0] = parseInt(document.getElementById("spnTime1").value,10) * 60*1000;
+				tmSetTime[1] = parseInt(document.getElementById("spnTime2").value,10) * 60*1000 + tmSetTime[0];
+				tmSetTime[2] = parseInt(document.getElementById("spnTime3").value,10) * 60*1000;
+				tmSetTime[3] = parseInt(document.getElementById("spnTime4").value,10) * 60*1000;
+			}
+			
+			function start(){
+				let date1 = new Date();
+				boolCountdown=1;
+				changemode(1);
+				
+				tmStartTime = new Date(); // スタート時間
+				
+				readSpinButton();
+				
+				// メッセージ変更
+				numMsg=1;
+				showMessage();
+				
+				// Ringリセット
+				for(let i=0;i<fileBell.length;i++){
+					boolBell[i]=1;
+				}
+			}
+			
+			function stop(){
+				boolCountdown=0;
+				changemode(0);
+				
+				let temp1;
+				temp1 =   new Date();
+				
+				tmElapsedTime1 = temp1.getTime()-tmStartTime.getTime()+tmElapsedTime1;
+				
+				// メッセージ変更
+				numMsg=2;
+				showMessage();
+			}
+			
+			function changeColor(){
+				// 色変更
+				if(numMode==0) { numMode=1; }
+				else { numMode=0; }
+				document.bgColor = colorSet[numMode][0];
+				document.fgColor = colorSet[numMode][1];
+				showMessage();
+			}
+			
+			function showMessage(){
+				// メッセージ表示
+				let eIdTxtMsg = document.getElementById("txtMsg");
+				eIdTxtMsg.style.color = colorSet[numMode][msgcolor[numMsg]+1];
+				eIdTxtMsg.innerHTML = message[numMsg];
+			
+				eIdTxtCdtime.style.color  = colorSet[numMode][msgcolor[numMsg]+1]
+				
+			}
+			
+			function changemode(mode){
+				// 実行中に変更禁止設定
+				if(mode==0){
+					// 停止中
+					document.getElementById("spnTime1").disabled = false;
+					document.getElementById("spnTime2").disabled = false;
+					document.getElementById("spnTime3").disabled = false;
+					document.getElementById("spnTime4").disabled = false;
+					document.getElementById("btnStart").disabled = false;
+					document.getElementById("btnStop").disabled = true;
+					document.getElementById("btnReset").disabled = false;
+				} else {
+					// 実行中
+					document.getElementById("spnTime1").disabled = true;
+					document.getElementById("spnTime2").disabled = true;
+					document.getElementById("spnTime3").disabled = true;
+					document.getElementById("spnTime4").disabled = true;
+					document.getElementById("btnStart").disabled = true;
+					document.getElementById("btnStop").disabled = false;
+					document.getElementById("btnReset").disabled = true;
+				}
+			}
+			
+		</script>
+		
+	</head>
+	<body onload="init();">
+		<div class="view-jstimer">
+			<!-- カウントダウンタイマー表示 -->
+			<div class="view-countdown txtCountdown" id="txtCdTimer">120:00</div>
+			<!-- メッセージ表示 -->
+			<div class="view-message txtMessage" id="txtMsg">時間超過</div>
+			<!--  コントロール表示 -->
+			<div class="view-control">
+				<div>
+					<button type=“button” onclick="start()" class="btnSetting1" id="btnStart">Start</button>
+					<button type=“button” onclick="stop()" class="btnSetting1" id="btnStop" disabled>Stop</button>
+					<button type=“button” onclick="reset()" class="btnSetting1" id="btnReset">Reset</button>
+				</div>
+				<div>
+					<div class="view-control-right">
+						<button type=“button” onclick="changeColor()" class="btnSetting2" id="btnColor">Color</button>
+						<select name="name-selectbells" id="opBell" size="1">
+							<option value="00">Bell</option>
+							<option value="01">Voice</option>
+						</select>
+					</div>
+				</div>
+			</div>
+			<!-- 設定エリア -->
+			<div class="view-setting view-set-items">
+				<div class="view-set-combo">
+					<div>
+						<div id="txtLabel1">講演時間</div>
+						<div id="txtLabel2">質問時間</div>
+					</div>
+					<div>
+						<div>
+							<input type="number" min="0" max="999" step="1" value="20" class="digit3" id="spnTime1">
+							<button type=“button” onclick="playSound(0)" class="btnSetting3" id="btnRing1">B</button>
+						</div>
+						<div>
+							<input type="number" min="0" max="999" step="1" value="5" class="digit3" id="spnTime2">
+							<button type=“button” onclick="playSound(1)" class="btnSetting3" id="btnRing2">B</button>
+						</div>
+					</div>
+				</div>
+				<div class="view-set-combo">
+					<div>
+						<div id="txtLabel3">予鈴1</div>
+						<div id="txtLabel4">予鈴2</div>
+					</div>
+					<div>
+						<div>
+							<input type="number" min="0" max="999" step="1" value="15" class="digit3" id="spnTime3">
+							<button type=“button” onclick="playSound(2)" class="btnSetting3" id="btnRing3">B</button>
+						</div>
+						<div>
+							<input type="number" min="0" max="999" step="1" value="19" class="digit3" id="spnTime4">
+							<button type=“button” onclick="playSound(3)" class="btnSetting3" id="btnRing4">B</button>
+						</div>
+					</div>
+				</div>
+				<div class="view-nowtime">
+					<div>
+						<div id="txtLabel5">現在時刻</div>
+						<div id="txtLabel6">経過時間</div>
+					</div>
+					<div>
+						<div id="txtNowTime">88:88:88</div>
+						<div id="txtElapsedTime">88:88</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</body>
+</html>
